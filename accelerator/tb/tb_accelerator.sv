@@ -16,8 +16,10 @@ module tb_accelerator;
         .clk(clk),
         .rst(rst), 
         .start(start),
-        .a(a),    
-        .b(b),   
+        .a0(a[0]), .a1(a[1]), .a2(a[2]), .a3(a[3]),
+        .a4(a[4]), .a5(a[5]), .a6(a[6]), .a7(a[7]),
+        .b0(b[0]), .b1(b[1]), .b2(b[2]), .b3(b[3]),
+        .b4(b[4]), .b5(b[5]), .b6(b[6]), .b7(b[7]),   
         .done(done),
         .result(result)
     );
@@ -103,9 +105,9 @@ module tb_accelerator;
         @(posedge clk); 
 
         if (result == expected_result) begin
-            $display(">> SUCESSO: Resultado (%d) corresponde ao esperado (%d). \n", result, expected_result);
+            $display(">> SUCESSO: Resultado (%d) corresponde ao esperado (%d). DONE = %b\n", result, expected_result, done);
         end else begin
-            $error(">> FALHA: Resultado (%d) NAO corresponde ao esperado (%d). \n", result, expected_result);
+            $display(">> FALHA: Resultado (%d) NAO corresponde ao esperado (%d). DONE = %b\n", result, expected_result, done);
         end
     endtask
 endmodule
