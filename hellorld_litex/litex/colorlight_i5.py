@@ -186,6 +186,7 @@ class BaseSoC(SoCCore):
                 self.add_video_framebuffer(phy=self.videophy, timings="800x600@60Hz", clock_domain="hdmi")
 
         # SPI ------------------------------------------------------------------------------------
+        # Para CN2
         spi_pads = [
                 ("spi", 0,
                     Subsignal("clk", Pins("G20")),
@@ -197,10 +198,24 @@ class BaseSoC(SoCCore):
         ]
 
         platform.add_extension(spi_pads)
-
-        self.spi = SPIMaster(pads=platform.request("spi"), data_width=8,
-                             sys_clk_freq=sys_clk_freq, spi_clk_freq=1e6)
+        self.spi = SPIMaster(pads=platform.request("spi"), data_width=8, sys_clk_freq=sys_clk_freq,
+                             spi_clk_freq=1e6)
         self.add_csr("spi")
+        
+        # I2C ------------------------------------------------------------------------------------
+        # Para J2
+        i2c_pads = [
+            ("i2c", 0,
+                Subsignal("scl", Pins("U17")),
+                Subsignal("sda", Pins("U18")),
+                IOStandard("LVCMOS33")
+            )
+        ]
+        
+        platform.add_extension(i2c_pads)
+        self.i2c = I2CMaster(pads=platform.request("i2c"), sys_clk_freq=sys_clk_freq,
+                             i2c_bus_freq=100000)
+        self.add_csr("i2c")
 
 # Build --------------------------------------------------------------------------------------------
 
