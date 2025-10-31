@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdint.h>
 
 #include <irq.h>
 #include <uart.h>
