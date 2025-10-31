@@ -16,7 +16,7 @@ static int ahtx0_read_status(uint8_t* status);
 
 // -------------------- I2C bit-bang helpers (LiteX CSR) --------------------
 #define I2C_ADDR_AHT10 0x38
-#define I2C_DELAY 300  // Ajuste conforme necessário (bus mais lento = valores maiores)
+#define I2C_DELAY 300 // Ajuste conforme necessário (bus mais lento = valores maiores)
 // Variante detectada: 0=desconhecida, 10=AHT10, 20=AHT20
 static int g_aht_variant = 0;
 
