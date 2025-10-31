@@ -327,6 +327,33 @@ static void prompt(void)
     printf("RUNTIME>");
 }
 
+static uint8_t spi_xfer8(uint8_t tx) {
+    spi_mosi_write(tx);
+    // START=1 | LENGTH=8 bits
+    uint32_t ctrl = (1u << CSR_SPI_CONTROL_START_OFFSET) | (8u << CSR_SPI_CONTROL_LENGTH_OFFSET);
+    spi_control_write(ctrl);
+    while ((spi_status_read() & (1u << CSR_SPI_STATUS_DONE_OFFSET)) == 0) { }
+    return spi_miso_read();
+}
+
+static void cmd_spiecho(const char* arg) {
+    unsigned v = 0;
+    if (!arg) { puts("usage: spiecho <hexbyte>"); return; }
+    v = (unsigned)strtoul(arg, NULL, 16) & 0xFF;
+    uint8_t rx = spi_xfer8((uint8_t)v);
+    printf("spiecho tx=0x%02x rx=0x%02x (loop=%u)\n", v, rx, spi_loopback_read());
+}
+
+static void cmd_spics(const char* arg) {
+    if (!arg) {
+        printf("spi.cs=%u\n", spi_cs_read() & ((1u<<CSR_SPI_CS_SEL_SIZE)-1));
+        return;
+    }
+    unsigned sel = (unsigned)strtoul(arg, NULL, 0) & ((1u<<CSR_SPI_CS_SEL_SIZE)-1);
+    spi_cs_write(sel);
+    printf("spi.cs<=%u\n", sel);
+}
+
 static void help(void)
 {
     puts("Available commands:");
@@ -341,6 +368,9 @@ static void help(void)
     puts("loratx                          - read sensor and TX via LoRa");
     puts("rfmver                          - read RFM95 version reg (0x42)");
     puts("spiloop on|off                  - enable/disable SPI internal loopback");
+	puts("spiecho <hex>                   - SPI loopback echo test");
+    puts("spics <n>                       - select SPI CS index");
+
 }
 
 // Pacote de telemetria (TX/RX devem concordar)
@@ -507,6 +537,10 @@ static void console_service(void)
         cmd_rfmver();
     else if(strcmp(token, "spiloop") == 0)
         cmd_spiloop(get_token(&str));
+	else if(strcmp(token, "spiecho") == 0)
+        cmd_spiecho(get_token(&str));
+    else if(strcmp(token, "spics") == 0)
+        cmd_spics(get_token(&str));
     prompt();
 }
 
