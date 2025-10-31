@@ -5,6 +5,16 @@ include $(SOC_DIRECTORY)/software/common.mak
 
 OBJECTS   = crt0.o main.o
 
+# Inclui headers da pasta libs
+CFLAGS += -I../libs
+
+# Adiciona o objeto da biblioteca LoRa
+OBJECTS += ../libs/lora_RFM95.o
+
+# Regra para compilar fontes em ../libs
+../libs/%.o: ../libs/%.c
+    $(CC) $(CFLAGS) -c $< -o $@
+
 all: main.bin
 
 # pull in dependency info for *existing* .o files
