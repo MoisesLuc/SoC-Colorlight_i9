@@ -203,7 +203,7 @@ class BaseSoC(SoCCore):
         self.add_csr("spi")
         
         # I2C ------------------------------------------------------------------------------------
-        # Para J2
+        # Para J4
         i2c_pads = [
             ("i2c", 0,
                 Subsignal("scl", Pins("U17"), Misc("PULLMODE=UP")),

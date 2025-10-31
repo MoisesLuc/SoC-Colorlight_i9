@@ -8,6 +8,8 @@
 #include <uart.h>
 #include <console.h>
 #include <generated/csr.h>
+#include <stdbool.h>
+#include "../libs/lora_RFM95.h"
 
 static void ahtx0_soft_reset(void);
 static int ahtx0_read_status(uint8_t* status);
@@ -335,6 +337,8 @@ static void help(void)
     puts("ahtinit                         - init/calibrate AHT10/AHT20");
     puts("ahtstatus                       - read AHT status");
     puts("aht                             - measure + read AHT10/AHT20");
+    puts("lorainit                        - init LoRa RFM95");
+    puts("loratx                          - read sensor and TX via LoRa");
 }
 
 static void reboot(void)
@@ -390,6 +394,36 @@ static void cmd_i2cscan(void) {
     i2c_scan();
 }
 
+static void cmd_lorainit(void) {
+    if (lora_init()) puts("LoRa init OK");
+    else             puts("LoRa init FAIL");
+}
+
+static void cmd_loratx(void) {
+    // Gera uma leitura e envia via LoRa
+    int r = aht10_trigger_measurement();
+    if (r != 0) { printf("AHT trigger error %d\n", r); return; }
+
+    int32_t t_c_centi;
+    uint32_t h_x100;
+    r = aht10_read_measurement(&t_c_centi, &h_x100);
+    if (r != 0) { printf("AHT read error %d\n", r); return; }
+
+    uint8_t payload[sizeof(lora_env_payload_t)];
+    size_t len = build_env_payload(payload, t_c_centi, h_x100);
+
+    bool ok = lora_send_bytes(payload, len);
+    if (!ok) {
+        puts("LoRa TX FAIL");
+        return;
+    }
+    int t_int = t_c_centi / 100;
+    int t_dec = t_c_centi % 100; if (t_dec < 0) t_dec = -t_dec;
+    int h_int = h_x100 / 100;
+    int h_dec = h_x100 % 100;
+    printf("LoRa TX OK: seq=%u T=%d.%02dC H=%d.%02d%%\n", (unsigned)(g_lora_seq-1), t_int, t_dec, h_int, h_dec);
+}
+
 static void console_service(void)
 {
     char *str;
@@ -412,6 +446,10 @@ static void console_service(void)
         cmd_aht_read();
     else if(strcmp(token, "ahtstatus") == 0)
         cmd_ahtstatus();
+    else if(strcmp(token, "lorainit") == 0)
+        cmd_lorainit();
+    else if(strcmp(token, "loratx") == 0)
+        cmd_loratx();
     prompt();
 }
 
