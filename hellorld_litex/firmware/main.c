@@ -9,7 +9,7 @@
 #include <console.h>
 #include <generated/csr.h>
 #include <stdbool.h>
-#include "../libs/lora_RFM95.h"
+#include "lora_RFM95.h"
 
 static void ahtx0_soft_reset(void);
 static int ahtx0_read_status(uint8_t* status);
@@ -339,6 +339,39 @@ static void help(void)
     puts("aht                             - measure + read AHT10/AHT20");
     puts("lorainit                        - init LoRa RFM95");
     puts("loratx                          - read sensor and TX via LoRa");
+}
+
+// Pacote de telemetria (TX/RX devem concordar)
+#pragma pack(push,1)
+typedef struct {
+    uint8_t  ver;             // =1
+    uint16_t seq;             // contador sequência
+    int16_t  temp_c_centi;    // centésimos de °C
+    uint16_t hum_x100;        // centésimos de %
+    uint8_t  flags;           // bit0: AHT20, bit1: AHT10
+    uint8_t  crc8;            // soma-8 dos bytes anteriores
+} lora_env_payload_t;
+#pragma pack(pop)
+
+static uint16_t g_lora_seq = 0;
+
+static uint8_t crc8_sum(const uint8_t* p, size_t n) {
+    uint32_t s = 0;
+    for (size_t i = 0; i < n; i++) s += p[i];
+    return (uint8_t)(s & 0xFF);
+}
+
+static size_t build_env_payload(uint8_t* out, int32_t t_c_centi, uint32_t h_x100) {
+    lora_env_payload_t pl;
+    pl.ver = 1;
+    pl.seq = g_lora_seq++;
+    pl.temp_c_centi = (int16_t)t_c_centi;
+    pl.hum_x100 = (uint16_t)h_x100;
+    pl.flags = (g_aht_variant==20) ? 0x01 : (g_aht_variant==10 ? 0x02 : 0x00);
+    pl.crc8 = 0;
+    memcpy(out, &pl, sizeof(pl));
+    out[sizeof(pl)-1] = crc8_sum(out, sizeof(pl)-1);
+    return sizeof(pl);
 }
 
 static void reboot(void)
