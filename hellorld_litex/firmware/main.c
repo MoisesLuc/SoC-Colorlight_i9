@@ -11,7 +11,9 @@
 
 // -------------------- I2C bit-bang helpers (LiteX CSR) --------------------
 #define I2C_ADDR_AHT10 0x38
-#define I2C_DELAY 200  // Ajuste conforme necessário (bus mais lento = valores maiores)
+#define I2C_DELAY 5000  // Ajuste conforme necessário (bus mais lento = valores maiores)
+// Variante detectada: 0=desconhecida, 10=AHT10, 20=AHT20
+static int g_aht_variant = 0;
 
 // Escreve os sinais no registrador W:
 // scl=1 -> solta SCL (pull-up). scl=0 -> força LOW.
@@ -63,6 +65,17 @@ static void i2c_stop(void) {
     i2c_delay();
     // STOP: libera SDA enquanto SCL alto
     i2c_write_lines(1, 0, 1);
+    i2c_delay();
+}
+
+// Repeated-START (igual ao START, sem STOP antes)
+static void i2c_restart(void) {
+    // SCL alto, SDA alto -> puxa SDA baixo mantendo SCL alto
+    i2c_write_lines(1, 0, 1);
+    i2c_delay();
+    i2c_write_lines(1, 1, 0);
+    i2c_delay();
+    i2c_write_lines(0, 1, 0);
     i2c_delay();
 }
 
@@ -121,22 +134,50 @@ static uint8_t i2c_read_byte(int ack) {
     return val;
 }
 
-// -------------------- AHT10 (Temp/Umid) --------------------
+// -------------------- AHT10/AHT20 (Temp/Umid) --------------------
+// Tenta AHT10 (0xE1); se NACK, tenta AHT20 (0xBE).
 static int aht10_init(void) {
-    // Comando de calibração: 0xE1, 0x08, 0x00
+    // aguarda power-up (>20ms)
+    for (int i = 0; i < 20000; i++) i2c_delay();
+
+    ahtx0_soft_reset();
+
+    // Tenta sequência AHT10 (0xE1 0x08 0x00)
     i2c_start();
     if (i2c_write_byte((I2C_ADDR_AHT10 << 1) | 0x00) != 0) { i2c_stop(); return -1; }
-    if (i2c_write_byte(0xE1) != 0) { i2c_stop(); return -2; }
-    if (i2c_write_byte(0x08) != 0) { i2c_stop(); return -3; }
-    if (i2c_write_byte(0x00) != 0) { i2c_stop(); return -4; }
-    i2c_stop();
-    // Espera pequena após init
-    for (int i = 0; i < 5000; i++) i2c_delay(); // ~ alguns ms
+    if (i2c_write_byte(0xE1) != 0) {
+        // Provavelmente AHT20: tenta 0xBE 0x08 0x00
+        i2c_stop();
+
+        i2c_start();
+        if (i2c_write_byte((I2C_ADDR_AHT10 << 1) | 0x00) != 0) { i2c_stop(); return -1; }
+        if (i2c_write_byte(0xBE) != 0) { i2c_stop(); return -2; }     // init error (AHT20)
+        if (i2c_write_byte(0x08) != 0) { i2c_stop(); return -3; }
+        if (i2c_write_byte(0x00) != 0) { i2c_stop(); return -4; }
+        i2c_stop();
+        g_aht_variant = 20;
+    } else {
+        if (i2c_write_byte(0x08) != 0) { i2c_stop(); return -3; }
+        if (i2c_write_byte(0x00) != 0) { i2c_stop(); return -4; }
+        i2c_stop();
+        g_aht_variant = 10;
+    }
+
+    // Espera pós-init (~10ms)
+    for (int i = 0; i < 8000; i++) i2c_delay();
+
+    // Checa status (opcional)
+    uint8_t st = 0;
+    if (ahtx0_read_status(&st) == 0) {
+        // bit7 busy; bit3 calib enable (datasheet AHT20)
+        // Apenas imprime; não falha init se calib não setado.
+        printf("AHT status: 0x%02x (var=%d)\n", st, g_aht_variant);
+    }
     return 0;
 }
 
 static int aht10_trigger_measurement(void) {
-    // Trigger: 0xAC, 0x33, 0x00
+    // Trigger: 0xAC, 0x33, 0x00 (AHT10/AHT20)
     i2c_start();
     if (i2c_write_byte((I2C_ADDR_AHT10 << 1) | 0x00) != 0) { i2c_stop(); return -1; }
     if (i2c_write_byte(0xAC) != 0) { i2c_stop(); return -2; }
@@ -182,6 +223,28 @@ static int aht10_read_measurement(int32_t* temp_c_centi, uint32_t* hum_x100) {
     // Satura umidade entre 0..10000 (0..100.00%)
     if (*hum_x100 > 10000u) *hum_x100 = 10000u;
 
+    return 0;
+}
+
+// Soft reset comum (AHT10/AHT20): 0xBA
+static void ahtx0_soft_reset(void) {
+    i2c_start();
+    (void)i2c_write_byte((I2C_ADDR_AHT10 << 1) | 0x00);
+    (void)i2c_write_byte(0xBA);
+    i2c_stop();
+    // aguarda ~20ms
+    for (int i = 0; i < 12000; i++) i2c_delay();
+}
+
+// Lê 1 byte de status via comando 0x71 (Repeated-START)
+static int ahtx0_read_status(uint8_t* status) {
+    i2c_start();
+    if (i2c_write_byte((I2C_ADDR_AHT10 << 1) | 0x00) != 0) { i2c_stop(); return -1; }
+    if (i2c_write_byte(0x71) != 0) { i2c_stop(); return -2; }
+    i2c_restart();
+    if (i2c_write_byte((I2C_ADDR_AHT10 << 1) | 0x01) != 0) { i2c_stop(); return -3; }
+    *status = i2c_read_byte(0); // NACK no último
+    i2c_stop();
     return 0;
 }
 
@@ -266,8 +329,9 @@ static void help(void)
     puts("reboot                          - reboot CPU");
     puts("led                             - led test");
     puts("i2cscan                         - scan I2C bus");
-    puts("ahtinit                         - init/calibrate AHT10");
-    puts("aht                             - measure + read AHT10");
+    puts("ahtinit                         - init/calibrate AHT10/AHT20");
+    puts("ahtstatus                       - read AHT status");
+    puts("aht                             - measure + read AHT10/AHT20");
 }
 
 static void reboot(void)
@@ -292,21 +356,31 @@ static void cmd_ahtinit(void) {
 static void cmd_aht_read(void) {
     int r = aht10_trigger_measurement();
     if (r != 0) {
-        printf("AHT10 trigger error %d\n", r);
+        printf("AHT trigger error %d\n", r);
         return;
     }
     int32_t t_c_centi;
     uint32_t h_x100;
     r = aht10_read_measurement(&t_c_centi, &h_x100);
     if (r != 0) {
-        printf("AHT10 read error %d\n", r);
+        printf("AHT read error %d\n", r);
         return;
     }
     int t_int = t_c_centi / 100;
     int t_dec = t_c_centi % 100; if (t_dec < 0) t_dec = -t_dec;
     int h_int = h_x100 / 100;
     int h_dec = h_x100 % 100;
-    printf("AHT10: Temp=%d.%02d C  Hum=%d.%02d %%\n", t_int, t_dec, h_int, h_dec);
+    printf("AHT(var=%d): Temp=%d.%02d C  Hum=%d.%02d %%\n", g_aht_variant, t_int, t_dec, h_int, h_dec);
+}
+
+static void cmd_ahtstatus(void) {
+    uint8_t st=0;
+    int r = ahtx0_read_status(&st);
+    if (r != 0) {
+        printf("AHT status err %d\n", r);
+    } else {
+        printf("AHT status=0x%02x (busy=%d, cal=%d)\n", st, (st>>7)&1, (st>>3)&1);
+    }
 }
 
 static void cmd_i2cscan(void) {
@@ -333,6 +407,8 @@ static void console_service(void)
         cmd_ahtinit();
     else if(strcmp(token, "aht") == 0)
         cmd_aht_read();
+    else if(strcmp(token, "ahtstatus") == 0)
+        cmd_ahtstatus();
     prompt();
 }
 
