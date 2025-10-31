@@ -9,7 +9,7 @@
 #include <console.h>
 #include <generated/csr.h>
 #include <stdbool.h>
-#include "lora_RFM95.h"
+#include "../libs/lora_RFM95.h"
 
 static void ahtx0_soft_reset(void);
 static int ahtx0_read_status(uint8_t* status);
