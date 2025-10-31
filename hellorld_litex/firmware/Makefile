@@ -13,7 +13,7 @@ OBJECTS += ../libs/lora_RFM95.o
 
 # Regra para compilar fontes em ../libs
 ../libs/%.o: ../libs/%.c
-    $(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 all: main.bin
 
