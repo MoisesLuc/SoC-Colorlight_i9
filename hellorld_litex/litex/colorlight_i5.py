@@ -21,7 +21,7 @@ from litex.soc.cores.video import VideoHDMIPHY
 from litex.soc.cores.led import LedChaser
 
 from litex.soc.cores.spi import SPIMaster
-from litex.soc.cores.i2c import I2CMaster
+from litex.soc.cores.bitbang import I2CMaster
 
 from litex.build.generic_platform import Subsignal, Pins, IOStandard
 
@@ -211,10 +211,10 @@ class BaseSoC(SoCCore):
                 IOStandard("LVCMOS33")
             )
         ]
-        
         platform.add_extension(i2c_pads)
-        self.i2c = I2CMaster(pads=platform.request("i2c"), sys_clk_freq=sys_clk_freq,
-                             i2c_bus_freq=100000)
+
+        # Instancia o core I2C em bit-bang e expõe via CSR
+        self.i2c = I2CMaster(pads=platform.request("i2c"))
         self.add_csr("i2c")
 
 # Build --------------------------------------------------------------------------------------------
