@@ -9,7 +9,7 @@
 #include <console.h>
 #include <generated/csr.h>
 #include <stdbool.h>
-#include "lora_RFM95.h"
+#include "../libs/lora_RFM95.h"
 
 static void ahtx0_soft_reset(void);
 static int ahtx0_read_status(uint8_t* status);
@@ -339,6 +339,8 @@ static void help(void)
     puts("aht                             - measure + read AHT10/AHT20");
     puts("lorainit                        - init LoRa RFM95");
     puts("loratx                          - read sensor and TX via LoRa");
+    puts("rfmver                          - read RFM95 version reg (0x42)");
+    puts("spiloop on|off                  - enable/disable SPI internal loopback");
 }
 
 // Pacote de telemetria (TX/RX devem concordar)
@@ -457,6 +459,24 @@ static void cmd_loratx(void) {
     printf("LoRa TX OK: seq=%u T=%d.%02dC H=%d.%02d%%\n", (unsigned)(g_lora_seq-1), t_int, t_dec, h_int, h_dec);
 }
 
+static void cmd_rfmver(void) {
+    // Lê diretamente o reg 0x42 (mesmo se lora_init falhou)
+    uint8_t v = lora_read_reg(0x42);
+    printf("RFM95 REG_VERSION = 0x%02x\n", v);
+}
+
+static void cmd_spiloop(const char* arg) {
+    if (arg && (!strcmp(arg, "on") || !strcmp(arg, "1"))) {
+        spi_loopback_write(1);
+        puts("SPI loopback: ON");
+    } else if (arg && (!strcmp(arg, "off") || !strcmp(arg, "0"))) {
+        spi_loopback_write(0);
+        puts("SPI loopback: OFF");
+    } else {
+        printf("SPI loopback state: %u\n", spi_loopback_read());
+    }
+}
+
 static void console_service(void)
 {
     char *str;
@@ -483,6 +503,10 @@ static void console_service(void)
         cmd_lorainit();
     else if(strcmp(token, "loratx") == 0)
         cmd_loratx();
+    else if(strcmp(token, "rfmver") == 0)
+        cmd_rfmver();
+    else if(strcmp(token, "spiloop") == 0)
+        cmd_spiloop(get_token(&str));
     prompt();
 }
 
