@@ -23,7 +23,7 @@ from litex.soc.cores.led import LedChaser
 from litex.soc.cores.spi import SPIMaster
 from litex.soc.cores.bitbang import I2CMaster
 
-from litex.build.generic_platform import Subsignal, Pins, IOStandard
+from litex.build.generic_platform import Subsignal, Pins, IOStandard, Misc
 
 from litex.soc.interconnect.csr import *
 
@@ -206,8 +206,8 @@ class BaseSoC(SoCCore):
         # Para J2
         i2c_pads = [
             ("i2c", 0,
-                Subsignal("scl", Pins("U17")),
-                Subsignal("sda", Pins("U18")),
+                Subsignal("scl", Pins("U17"), Misc("PULLMODE=UP")),
+                Subsignal("sda", Pins("U18"), Misc("PULLMODE=UP")),
                 IOStandard("LVCMOS33")
             )
         ]

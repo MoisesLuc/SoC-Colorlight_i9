@@ -39,7 +39,8 @@ static inline unsigned int i2c_get_lines(void) {
 
 static inline void i2c_delay_halfcycle(void) {
 	// ~5us por metade do ciclo
-	volatile int n = CONFIG_CLOCK_FREQUENCY / 200000;
+	//volatile int n = CONFIG_CLOCK_FREQUENCY / 200000;
+	volatile int n = CONFIG_CLOCK_FREQUENCY / 20000; // Para depuração
 	while (n--) __asm__ volatile("");
 }
 
@@ -48,9 +49,19 @@ static inline void i2c_scl_low(void)  { i2c_out &= ~I2C_SCL; i2c_apply(); }
 static inline void i2c_sda_high(void) { i2c_out |= I2C_SDA; i2c_apply(); }
 static inline void i2c_sda_low(void)  { i2c_out &= ~I2C_SDA; i2c_apply(); }
 
+static int i2c_wait_high(uint8_t mask) {
+    // Aguarda a(s) linha(s) subir(em), detecta falta de pull-up
+    for (int i = 0; i < 1000; ++i) { // ~50 ms total
+        if ((i2c_get_lines() & mask) == mask) return 0;
+        i2c_delay_halfcycle();
+    }
+    return -1;
+}
+
 static void i2c_bus_idle(void) {
 	i2c_sda_high();
 	i2c_scl_high();
+	i2c_wait_high(I2C_SCL | I2C_SDA);
 	i2c_delay_halfcycle();
 }
 
@@ -69,11 +80,14 @@ static void i2c_stop(void) {
 }
 
 static int i2c_write_bit(int bit) { 
-	if (bit) i2c_sda_high(); else i2c_sda_low(); 
-	i2c_delay_halfcycle(); 
-	i2c_scl_high(); i2c_delay_halfcycle(); 
-	i2c_scl_low(); i2c_delay_halfcycle(); 
-	return 0; 
+	if (bit) i2c_sda_high(); else i2c_sda_low();
+    i2c_delay_halfcycle();
+    i2c_scl_high();
+    if (i2c_wait_high(I2C_SCL) != 0) return -10; // SCL não sobe
+    i2c_delay_halfcycle();
+    i2c_scl_low();
+    i2c_delay_halfcycle();
+    return 0;
 }
 
 static int i2c_probe(uint8_t addr7) {
@@ -84,14 +98,35 @@ static int i2c_probe(uint8_t addr7) {
 	return r;
 }
 
-
 static int i2c_read_bit(void) {
-	// Libera SDA e amostra com SCL alto 
-	i2c_sda_high(); i2c_delay_halfcycle(); 
-	i2c_scl_high(); i2c_delay_halfcycle(); 
-	int bit = (i2c_get_lines() & I2C_SDA) ? 1 : 0; 
-	i2c_scl_low(); i2c_delay_halfcycle(); 
-	return bit; 
+	// Libera SDA e amostra com SCL alto
+    i2c_sda_high();
+    i2c_delay_halfcycle();
+    i2c_scl_high();
+    if (i2c_wait_high(I2C_SCL) != 0) return 0; // trata como 0 se SCL não sobe
+    i2c_delay_halfcycle();
+    int bit = (i2c_get_lines() & I2C_SDA) ? 1 : 0;
+    i2c_scl_low();
+    i2c_delay_halfcycle();
+    return bit;
+}
+
+// Quick check: barramento deve ficar em 1/1 quando liberado
+static int i2c_bus_test(void) {
+    i2c_sda_high();
+    i2c_scl_high();
+    i2c_delay_halfcycle();
+    unsigned v = i2c_get_lines();
+    return (v & (I2C_SCL | I2C_SDA)) == (I2C_SCL | I2C_SDA) ? 0 : -1;
+}
+
+// Comando de diagnóstico
+static void cmd_i2c_check(void) {
+    int r = i2c_bus_test();
+    unsigned v = i2c_get_lines();
+    printf("I2C lines: SCL=%d SDA=%d -> %s\n",
+        (v & I2C_SCL) != 0, (v & I2C_SDA) != 0,
+        (r == 0) ? "OK (pull-ups presentes)" : "ERRO (linhas não sobem)");
 }
 
 static int i2c_write_byte(unsigned char byte) { 
@@ -120,6 +155,9 @@ static void delay_ms(unsigned int ms) {
 		while (n--) asm volatile(""); 
 	} 
 }
+
+
+
 
 // Configuração do driver AHT10
 #define AHT10_ADDR         0x38
@@ -279,6 +317,7 @@ static void help(void)
 	puts("help                            - this command");
 	puts("reboot                          - reboot CPU");
 	puts("led                             - led test");
+	puts("i2c_check                       - check I2C lines levels (pull-ups)");
 	puts("i2c_scan                        - scan I2C bus for devices");
 	puts("aht10_probe					  - probe AHT10 sensor");
 	puts("aht10_init					  - initialize AHT10 sensor");
@@ -360,8 +399,10 @@ static void console_service(void)
 		reboot();
 	else if(strcmp(token, "led") == 0)
 		toggle_led();
-	else if(strcmp(token, "i2c_scan") == 0)
-		cmd_i2c_scan();
+	else if(strcmp(token, "i2c_check") == 0)
+        cmd_i2c_check();
+    else if(strcmp(token, "i2c_scan") == 0)
+        cmd_i2c_scan();
 	else if(strcmp(token, "aht10_probe") == 0)
 		cmd_aht10_probe();
 	else if(strcmp(token, "aht10_init") == 0)
