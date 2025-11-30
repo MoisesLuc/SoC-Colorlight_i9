@@ -1,0 +1,65 @@
+# Build directories
+build/
+firmware/build/
+firmware/tflm/build/
+
+# Compiled files
+*.o
+*.a
+*.so
+*.bin
+*.elf
+*.map
+*.d
+
+# LiteX generated files
+*.v
+*.json
+*.bit
+*.config
+*.svf
+*.rpt
+*.ys
+*.lpf
+*.init
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# Toolchain (if you don't want to commit the large toolchain)
+# Uncomment the line below if toolchain should not be in repo
+# toolchain/
+
+# Specific build artifacts
+firmware/*.bin
+firmware/*.elf
+firmware/*.map
+firmware/models/*.o
+firmware/platform/*.o
+
+# GDB files
+.gdb_history
