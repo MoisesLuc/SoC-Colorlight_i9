@@ -21,9 +21,9 @@ from litex.soc.cores.video import VideoHDMIPHY
 from litex.soc.cores.led import LedChaser
 
 from litex.soc.cores.spi import SPIMaster
-from litex.soc.cores.i2c import I2CMaster
-
-from litex.build.generic_platform import Subsignal, Pins, IOStandard
+from litex.soc.cores.bitbang import I2CMaster
+from litex.soc.cores.gpio import GPIOOut
+from litex.build.generic_platform import Subsignal, Pins, IOStandard, Misc
 
 from litex.soc.interconnect.csr import *
 
@@ -186,35 +186,40 @@ class BaseSoC(SoCCore):
                 self.add_video_framebuffer(phy=self.videophy, timings="800x600@60Hz", clock_domain="hdmi")
 
         # SPI ------------------------------------------------------------------------------------
-        # Para CN2
+        # Para CN5
         spi_pads = [
                 ("spi", 0,
-                    Subsignal("clk", Pins("G20")),
-                    Subsignal("mosi", Pins("L18")),
-                    Subsignal("miso", Pins("M18")),
-                    Subsignal("cs_n", Pins("N17")),
+                    Subsignal("clk", Pins("N2")),
+                    Subsignal("mosi", Pins("M1")),
+                    Subsignal("miso", Pins("T2")),
+                    Subsignal("cs_n", Pins("T3")),
                     IOStandard("LVCMOS33")
-                )
+                ),
+
+                ("lora_reset", 0, Pins("N3"), IOStandard("LVCMOS33")),
         ]
 
         platform.add_extension(spi_pads)
         self.spi = SPIMaster(pads=platform.request("spi"), data_width=8, sys_clk_freq=sys_clk_freq,
                              spi_clk_freq=1e6)
         self.add_csr("spi")
+
+        self.submodules.lora_reset = GPIOOut(platform.request("lora_reset"))
+        self.add_csr("lora_reset")
         
         # I2C ------------------------------------------------------------------------------------
-        # Para J2
+        # Para J4
         i2c_pads = [
             ("i2c", 0,
-                Subsignal("scl", Pins("U17")),
-                Subsignal("sda", Pins("U18")),
+                Subsignal("scl", Pins("J20"), Misc("PULLMODE=UP")),
+                Subsignal("sda", Pins("K20"), Misc("PULLMODE=UP")),
                 IOStandard("LVCMOS33")
             )
         ]
-        
         platform.add_extension(i2c_pads)
-        self.i2c = I2CMaster(pads=platform.request("i2c"), sys_clk_freq=sys_clk_freq,
-                             i2c_bus_freq=100000)
+
+        # Instancia o core I2C em bit-bang e expõe via CSR
+        self.i2c = I2CMaster(pads=platform.request("i2c"))
         self.add_csr("i2c")
 
 # Build --------------------------------------------------------------------------------------------
