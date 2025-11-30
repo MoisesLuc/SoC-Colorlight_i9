@@ -253,6 +253,90 @@ static void tflm_test(void)
 	printf("=== All tests completed ===\n\n");
 }
 
+// Continuous inference loop - simulates LED wave effect in console
+static void tflm_continuous(void)
+{
+	if (!interpreter) {
+		printf("Model not initialized. Run 'init' first.\n");
+		return;
+	}
+	
+	printf("\n=== Continuous Inference Mode ===\n");
+	printf("Simulating sine wave (like LED brightness control)\n");
+	printf("Press Ctrl+C or any key to stop\n\n");
+	
+	float x = 0.0f;
+	const float kXrange = 2.0f * 3.14159265f; // 2*PI
+	int inference_count = 0;
+	
+	while (1) {
+		// Check if user wants to stop
+		if (readchar_nonblock()) {
+			readchar(); // consume the character
+			break;
+		}
+		
+		// Quantize input
+		float input_scale = input->params.scale;
+		int input_zero_point = input->params.zero_point;
+		int8_t quantized_input = (int8_t)(x / input_scale + input_zero_point);
+		
+		// Set input and run inference
+		input->data.int8[0] = quantized_input;
+		TfLiteStatus invoke_status = interpreter->Invoke();
+		
+		if (invoke_status != kTfLiteOk) {
+			printf("Invoke failed!\n");
+			break;
+		}
+		
+		// Dequantize output
+		float output_scale = output->params.scale;
+		int output_zero_point = output->params.zero_point;
+		float y_val = (output->data.int8[0] - output_zero_point) * output_scale;
+		
+		// Convert output to "brightness" (0-100%)
+		// Output is in range [-1, 1], convert to [0, 1]
+		float brightness = (y_val + 1.0f) / 2.0f;
+		if (brightness < 0.0f) brightness = 0.0f;
+		if (brightness > 1.0f) brightness = 1.0f;
+		
+		int brightness_percent = (int)(brightness * 100.0f);
+		
+		// Print wave visualization
+		printf("x=");
+		print_float(x, 2);
+		printf(" y=");
+		print_float(y_val, 3);
+		printf(" [");
+		
+		// Draw brightness bar
+		int bar_length = brightness_percent / 2; // 50 chars max
+		for (int i = 0; i < 50; i++) {
+			if (i < bar_length) {
+				printf("=");
+			} else {
+				printf(" ");
+			}
+		}
+		printf("] %d%%\n", brightness_percent);
+		
+		// Increment x and wrap around
+		x += 0.1f;
+		if (x >= kXrange) {
+			x = 0.0f;
+			inference_count++;
+			printf("--- Cycle %d completed ---\n", inference_count);
+		}
+		
+		// Small delay to make it visible
+		for (volatile int i = 0; i < 100000; i++);
+	}
+	
+	printf("\n=== Stopped continuous mode ===\n");
+	printf("Total cycles: %d\n\n", inference_count);
+}
+
 static void help(void)
 {
 	puts("TensorFlow Lite Micro on LiteX - Available commands:");
@@ -262,6 +346,7 @@ static void help(void)
 	puts("init                - Initialize TensorFlow Lite Micro");
 	puts("test                - Run inference test suite");
 	puts("infer <value>       - Run inference on single value");
+	puts("run                 - Run continuous inference (sine wave)");
 	puts("info                - Show model information");
 }
 
@@ -343,6 +428,9 @@ static void console_service(void)
 	}
 	else if(strcmp(token, "test") == 0) {
 		tflm_test();
+	}
+	else if(strcmp(token, "run") == 0) {
+		tflm_continuous();
 	}
 	else if(strcmp(token, "infer") == 0) {
 		token = get_token(&str);
